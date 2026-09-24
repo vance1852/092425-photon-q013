@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -25,6 +26,13 @@ CREATE TABLE IF NOT EXISTS lot_events(
 CREATE TABLE IF NOT EXISTS approvals(
  lot_id TEXT NOT NULL, reviewer TEXT NOT NULL, decision TEXT NOT NULL,
  reason TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(lot_id,reviewer));
+CREATE TABLE IF NOT EXISTS stat_reports(
+ report_id TEXT PRIMARY KEY, lot_id TEXT NOT NULL REFERENCES chip_lots(lot_id),
+ metric TEXT NOT NULL, algorithm_version TEXT NOT NULL,
+ min_sample_size INTEGER NOT NULL, confidence REAL NOT NULL, z_value REAL NOT NULL,
+ sample_count INTEGER NOT NULL, sample_fingerprint TEXT NOT NULL,
+ report_json TEXT NOT NULL, generated_by TEXT NOT NULL, created_at TEXT NOT NULL,
+ UNIQUE(lot_id,metric,sample_fingerprint,confidence,min_sample_size));
 """
 
 
@@ -32,8 +40,18 @@ def utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def canonical_json(value: object) -> str:
+    """生成确定性的紧凑 JSON，用于数据指纹与快照序列化。"""
+    return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"))
+
+
+def fingerprint(value: object) -> str:
+    """对规范化 JSON 计算 SHA-256 指纹。"""
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
 def connect(path: str = ":memory:") -> sqlite3.Connection:
-    db = sqlite3.connect(path)
+    db = sqlite3.connect(path, check_same_thread=False)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     db.executescript(SCHEMA)

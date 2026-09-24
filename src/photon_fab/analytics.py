@@ -37,16 +37,59 @@ def summarize_spectrum(wavelengths: Sequence[float], response: Sequence[float], 
     return SpectrumSummary(len(pairs), peak_w, peak_r, mean, noise, (min(band), max(band)))
 
 
+RESPONSIVITY_REPORT_VERSION = "responsivity-report/1"
+MIN_RESPONSIVITY_SAMPLES = 3
+
+
+def _z_for(confidence: float) -> float:
+    if not 0 < confidence < 1:
+        raise ValueError("confidence must lie between 0 and 1")
+    return 1.96 if confidence >= 0.95 else 1.645
+
+
 def confidence_interval(values: Iterable[float], confidence: float = 0.95) -> tuple[float, float]:
     data = [float(v) for v in values]
-    if not data or not 0 < confidence < 1:
-        raise ValueError("values and confidence are invalid")
+    if not data:
+        raise ValueError("values are invalid")
     mean = statistics.fmean(data)
     if len(data) == 1:
         return mean, mean
-    z = 1.96 if confidence >= 0.95 else 1.645
-    margin = z * statistics.stdev(data) / math.sqrt(len(data))
+    margin = _z_for(confidence) * statistics.stdev(data) / math.sqrt(len(data))
     return mean - margin, mean + margin
+
+
+@dataclass(frozen=True)
+class ResponsivityStatistics:
+    count: int
+    mean: float | None
+    ci_lower: float | None
+    ci_upper: float | None
+    sufficient: bool
+    confidence: float
+    z: float
+
+
+def responsivity_statistics(
+    values: Iterable[float],
+    *,
+    confidence: float = 0.95,
+    min_sample_size: int = MIN_RESPONSIVITY_SAMPLES,
+) -> ResponsivityStatistics:
+    """计算响应度均值与 95% 置信区间；样本不足时只标记、不伪造区间精度。"""
+    if min_sample_size < 2:
+        raise ValueError("min_sample_size must be at least 2")
+    z = _z_for(confidence)
+    data = [float(v) for v in values]
+    if any(not math.isfinite(v) for v in data):
+        raise ValueError("measurements must be finite")
+    count = len(data)
+    mean = statistics.fmean(data) if data else None
+    sufficient = count >= min_sample_size
+    if sufficient:
+        lower, upper = confidence_interval(data, confidence)
+    else:
+        lower = upper = None
+    return ResponsivityStatistics(count, mean, lower, upper, sufficient, confidence, z)
 
 
 def yield_rate(total: int, passed: int, rejected: int = 0) -> dict[str, float]:

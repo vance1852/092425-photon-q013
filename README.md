@@ -59,6 +59,13 @@ PYTHONPATH=src python3 -m plant_science.acceptance --workspace .
 
 `src/photon_fab/` 提供光电芯片批次、光谱测量、科学计算、质量审批和审计的离线后台。SQLite 保存完整批次生命周期，角色权限覆盖操作员、工程师、质量人员和管理员；峰值波长、噪声 RMS、响应度、置信区间及良率计算均为确定性本地算法。
 
+响应度统计报告为只增快照，供研发评审复现：
+
+- `POST /lots/{lot_id}/responsivity-reports` 生成报告，返回样本数、响应度均值和 95% 置信区间；样本数低于最小要求（默认 3）时 `status` 为 `insufficient_sample`，均值仅供参考且 `ci_lower`/`ci_upper` 为 `null`，不伪造区间精度；
+- 报告持久化计算参数（算法版本、置信度、z 值、最小样本数）、样本 SHA-256 指纹、当时工艺版本、样本明细和生成者，同一批数据重复生成返回同一报告；
+- `GET /lots/{lot_id}/responsivity-reports` 列出报告摘要，`GET /lots/{lot_id}/responsivity-reports/{report_id}` 读取历史报告；读取只返回当时冻结的快照，工艺版本升级或后来新增测量都不会被重新引用；
+- 服务重启后报告仍保留在 SQLite 中，可直接调取历史报告。
+
 ```bash
 PYTHONPATH=src python3 -m photon_fab.acceptance
 PYTHONPATH=src python3 -m photon_fab.api --database photon.sqlite3 --port 8080
