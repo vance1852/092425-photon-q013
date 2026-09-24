@@ -23,6 +23,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             return self._json(200, {"status": "ok", "service": "photon-fab"})
+        if self.path.startswith("/reports/"):
+            try:
+                token = self.headers.get("Authorization", "").removeprefix("Bearer ")
+                return self._json(200, self.service.get_report(token, self.path.split("/")[2]))
+            except KeyError as exc:
+                return self._json(404, {"error": f"report not found: {exc.args[0]}"})
+            except Exception as exc:
+                return self._json(400, {"error": str(exc)})
+        if self.path.startswith("/lots/") and self.path.endswith("/responsivity-reports"):
+            try:
+                token = self.headers.get("Authorization", "").removeprefix("Bearer ")
+                lot_id = self.path.split("/")[2]
+                return self._json(200, {"reports": self.service.list_reports(token, lot_id)})
+            except Exception as exc:
+                return self._json(400, {"error": str(exc)})
         if self.path.startswith("/lots/"):
             try:
                 token = self.headers.get("Authorization", "").removeprefix("Bearer ")
@@ -44,9 +59,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(201, self.service.add_measurement(token, lot_id, body["wavelength_nm"], body["response"], body.get("noise", 0.0), body["instrument"]))
             if self.path.startswith("/lots/") and self.path.endswith("/analysis"):
                 return self._json(200, self.service.analyze(token, self.path.split("/")[2]))
+            if self.path.startswith("/lots/") and self.path.endswith("/responsivity-reports"):
+                lot_id = self.path.split("/")[2]
+                return self._json(201, self.service.create_responsivity_report(token, lot_id))
             return self._json(404, {"error": "not found"})
         except PermissionError as exc:
             return self._json(403, {"error": str(exc)})
+        except KeyError as exc:
+            return self._json(404, {"error": f"not found: {exc.args[0]}"})
         except Exception as exc:
             return self._json(400, {"error": str(exc)})
 

@@ -25,6 +25,18 @@ CREATE TABLE IF NOT EXISTS lot_events(
 CREATE TABLE IF NOT EXISTS approvals(
  lot_id TEXT NOT NULL, reviewer TEXT NOT NULL, decision TEXT NOT NULL,
  reason TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(lot_id,reviewer));
+CREATE TABLE IF NOT EXISTS responsivity_reports(
+ report_id TEXT PRIMARY KEY, lot_id TEXT NOT NULL REFERENCES chip_lots(lot_id),
+ algorithm_version TEXT NOT NULL, confidence REAL NOT NULL, min_samples INTEGER NOT NULL,
+ sample_count INTEGER NOT NULL, sufficient INTEGER NOT NULL,
+ mean_response REAL, ci_lower REAL, ci_upper REAL, insufficient_reason TEXT,
+ process_rev TEXT NOT NULL, data_sha256 TEXT NOT NULL CHECK(length(data_sha256)=64),
+ created_by TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS report_measurements(
+ report_id TEXT NOT NULL REFERENCES responsivity_reports(report_id),
+ measurement_id TEXT NOT NULL, wavelength_nm REAL NOT NULL, response REAL NOT NULL,
+ ordinal INTEGER NOT NULL, PRIMARY KEY(report_id,measurement_id));
+CREATE INDEX IF NOT EXISTS idx_reports_lot ON responsivity_reports(lot_id, created_at);
 """
 
 
